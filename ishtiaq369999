@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS — Holographic Display Unit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06070a;
+  --panel:rgba(13,14,19,0.55);
+  --border:rgba(255,255,255,0.08);
+  --border-bright:rgba(255,140,26,0.4);
+  --text:#ebe4d3;
+  --text-mid:#948e7e;
+  --text-dim:#5a5547;
+  --accent:#ff8c1a;
+  --accent-hover:#ff2d8c;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.04em;-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+#canvas-container{position:fixed;inset:0;z-index:0}
+#canvas-container canvas{display:block}
+.vignette{position:fixed;inset:0;pointer-events:none;z-index:5;background:radial-gradient(ellipse 75% 65% at center,transparent 30%,rgba(0,0,0,0.72) 100%)}
+.grain{position:fixed;inset:0;pointer-events:none;z-index:6;opacity:0.045;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+.hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+.hud>*{pointer-events:auto}
+
+.hud-corner{position:absolute;width:26px;height:26px;border:1px solid var(--accent);opacity:0.55;pointer-events:none}
+.hud-corner-tl{top:22px;left:22px;border-right:none;border-bottom:none}
+.hud-corner-tr{top:22px;right:22px;border-left:none;border-bottom:none}
+.hud-corner-bl{bottom:22px;left:22px;border-right:none;border-top:none}
+.hud-corner-br{bottom:22px;right:22px;border-left:none;border-top:none}
+
+.hud-top{position:absolute;top:44px;left:56px;right:56px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.hud-top>*{pointer-events:auto}
+.brand{display:flex;align-items:center;gap:16px}
+.logo-mark{width:32px;height:32px;position:relative;flex-shrink:0}
+.logo-mark::before{content:'';position:absolute;inset:0;border:1.5px solid var(--accent);transform:rotate(45deg)}
+.logo-mark::after{content:'';position:absolute;inset:9px;background:var(--accent);transform:rotate(45deg);box-shadow:0 0 12px var(--accent),0 0 24px rgba(255,140,26,0.4)}
+.brand-text{display:flex;flex-direction:column}
+.brand-name{font-family:'Syncopate',sans-serif;font-weight:700;font-size:22px;letter-spacing:0.2em;line-height:1}
+.brand-sub{font-size:9.5px;color:var(--text-dim);margin-top:6px;letter-spacing:0.3em;font-weight:400}
+
+.status{display:flex;flex-direction:column;gap:8px;text-align:right;font-size:10px;color:var(--text-mid)}
+.status-row{display:flex;align-items:center;justify-content:flex-end;gap:10px;letter-spacing:0.18em}
+.status-dot{width:7px;height:7px;background:var(--text-dim);border-radius:50%}
+.status-dot.active{background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.55;transform:scale(0.82)}}
+
+.hud-right{position:absolute;right:56px;top:50%;transform:translateY(-50%);width:248px;background:var(--panel);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--border);padding:22px 18px}
+.hud-right::before{content:'';position:absolute;top:-1px;left:20px;right:20px;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent)}
+.panel-label{font-size:9.5px;color:var(--text-dim);letter-spacing:0.35em;margin-bottom:18px;display:flex;align-items:center;gap:12px}
+.panel-label::after{content:'';flex:1;height:1px;background:var(--border)}
+.model-list{display:flex;flex-direction:column;gap:6px}
+.model-btn{background:transparent;border:1px solid var(--border);color:var(--text-mid);padding:11px 12px;display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:10px;cursor:pointer;font-size:11px;letter-spacing:0.12em;transition:all 0.25s ease;position:relative;overflow:hidden;text-align:left}
+.model-btn::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent);transform:scaleY(0);transition:transform 0.25s ease;transform-origin:center}
+.model-btn:hover{border-color:var(--border-bright);color:var(--text);background:rgba(255,140,26,0.04)}
+.model-btn:hover::before{transform:scaleY(0.4)}
+.model-btn.active{background:rgba(255,140,26,0.1);border-color:var(--accent);color:var(--accent)}
+.model-btn.active::before{transform:scaleY(1)}
+.model-index{font-family:'Syncopate',sans-serif;font-size:14px;font-weight:700;opacity:0.55}
+.model-btn.active .model-index{opacity:1}
+.model-name{font-weight:500}
+.model-id{font-size:9px;color:var(--text-dim);letter-spacing:0.05em}
+
+.hud-bottom{position:absolute;bottom:44px;left:56px;right:56px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;pointer-events:none}
+.hud-bottom>*{pointer-events:auto}
+.hint{display:flex;gap:18px;font-size:10px;color:var(--text-dim);letter-spacing:0.18em}
+.hint>div{display:flex;align-items:center;gap:8px}
+.hint-key{display:inline-block;padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--text);font-weight:500;font-size:9.5px;letter-spacing:0.15em}
+.readout{display:flex;gap:28px;background:var(--panel);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border);padding:11px 18px;transition:border-color 0.3s}
+.readout>div{display:flex;flex-direction:column;gap:3px}
+.r-label{color:var(--text-dim);font-size:9px;letter-spacing:0.25em}
+.r-val{color:var(--accent);font-weight:500;font-size:11px;letter-spacing:0.1em;transition:color 0.3s}
+body.hovering .readout{border-color:var(--accent-hover)}
+body.hovering .r-val{color:var(--accent-hover)}
+
+.loader{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:100;transition:opacity 0.8s ease}
+.loader.hidden{opacity:0;pointer-events:none}
+.loader-text{font-family:'Syncopate',sans-serif;font-size:12px;letter-spacing:0.45em;color:var(--accent)}
+.loader-bar{width:220px;height:1.5px;background:rgba(255,255,255,0.08);overflow:hidden;position:relative}
+.loader-fill{position:absolute;inset:0;background:var(--accent);transform:scaleX(0);transform-origin:left;animation:loadFill 1.4s cubic-bezier(0.4,0,0.2,1) forwards;box-shadow:0 0 10px var(--accent)}
+@keyframes loadFill{to{transform:scaleX(1)}}
+.loader-sub{font-size:9px;color:var(--text-dim);letter-spacing:0.3em;margin-top:6px}
+
+@media(max-width:980px){
+  .hud-top{left:24px;right:24px;top:24px}
+  .hud-bottom{left:24px;right:24px;bottom:24px}
+  .hud-right{right:24px;width:208px;padding:16px 14px}
+  .brand-name{font-size:18px}
+  .hint{gap:10px}
+  .hint>div:nth-child(3),.hint>div:nth-child(4){display:none}
+}
+@media(max-width:680px){
+  .hud-right{left:16px;right:16px;width:auto;top:auto;bottom:96px;transform:none;max-height:230px;overflow-y:auto}
+  .hud-bottom{display:none}
+  .status{display:none}
+  .brand-sub{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="loader" id="loader">
+  <div class="loader-text">INITIALIZING HOLO-FIELD</div>
+  <div class="loader-bar"><div class="loader-fill"></div></div>
+  <div class="loader-sub">SYSTEM BOOT / v3.07.2</div>
+</div>
+
+<div id="canvas-container"></div>
+<div class="vignette"></div>
+<div class="grain"></div>
+
+<div class="hud">
+  <div class="hud-corner hud-corner-tl"></div>
+  <div class="hud-corner hud-corner-tr"></div>
+  <div class="hud-corner hud-corner-bl"></div>
+  <div class="hud-corner hud-corner-br"></div>
+
+  <header class="hud-top">
+    <div class="brand">
+      <div class="logo-mark"></div>
+      <div class="brand-text">
+        <div class="brand-name">NEXUS</div>
+        <div class="brand-sub">DISPLAY UNIT / 07</div>
+      </div>
+    </div>
+    <div class="status">
+      <div class="status-row"><span>HOLO-FIELD STABLE</span><span class="status-dot active"></span></div>
+      <div class="status-row"><span>LEVITATION 99.7%</span><span class="status-dot active"></span></div>
+      <div class="status-row"><span>POWER 4.2 kJ</span><span class="status-dot active"></span></div>
+    </div>
+  </header>
+
+  <aside class="hud-right">
+    <div class="panel-label">SPECIMEN CATALOG</div>
+    <div class="model-list">
+      <button class="model-btn active" data-model="0"><span class="model-index">α</span><span class="model-name">CUBE</span><span class="model-id">#A001</span></button>
+      <button class="model-btn" data-model="1"><span class="model-index">β</span><span class="model-name">TORUS</span><span class="model-id">#B014</span></button>
+      <button class="model-btn" data-model="2"><span class="model-index">γ</span><span class="model-name">ICOSA</span><span class="model-id">#C027</span></button>
+      <button class="model-btn" data-model="3"><span class="model-index">δ</span><span class="model-name">OCTA</span><span class="model-id">#D038</span></button>
+      <button class="model-btn" data-model="4"><span class="model-index">ε</span><span class="model-name">DODECA</span><span class="model-id">#E049</span></button>
+    </div>
+  </aside>
+
+  <footer class="hud-bottom">
+    <div class="hint">
+      <div><span class="hint-key">CLICK</span>swap specimen</div>
+      <div><span class="hint-key">DRAG</span>rotate view</div>
+      <div><span class="hint-key">1-5</span>direct select</div>
+      <div><span class="hint-key">SPACE</span>toggle orbit</div>
+    </div>
+    <div class="readout">
+      <div><span class="r-label">ORBIT</span><span class="r-val" id="orbit-state">AUTO</span></div>
+      <div><span class="r-label">SPEC</span><span class="r-val" id="spec-name">CUBE-α</span></div>
+      <div><span class="r-label">CODE</span><span class="r-val" id="spec-code">#A001</span></div>
+    </div>
+  </footer>
+</div>
+
+<script type="importmap">
+{
+  "imports":{
+    "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// === Configuration ===
+const CONFIG = {
+  neonBase:   0xff8c1a,  // electric amber
+  neonHover:  0xff2d8c,  // hot magenta
+  glassSize:  1.6,
+  glassY:     1.65,
+  hexRadius:  1.7
+};
+
+// === Renderer ===
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+// === Scene & Camera ===
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06070a);
+scene.fog = new THREE.FogExp2(0x06070a, 0.05);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(5.5, 3.2, 6.5);
+
+// === Controls (auto-orbit when idle) ===
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.4, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 3;
+controls.maxDistance = 14;
+controls.maxPolarAngle = Math.PI/2 - 0.02;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+
+let resumeTimer;
+controls.addEventListener('start', () => {
+  controls.autoRotate = false;
+  document.getElementById('orbit-state').textContent = 'MANUAL';
+  clearTimeout(resumeTimer);
+});
+controls.addEventListener('end', () => {
+  clearTimeout(resumeTimer);
+  resumeTimer = setTimeout(() => {
+    controls.autoRotate = true;
+    document.getElementById('orbit-state').textContent = 'AUTO';
+  }, 4000);
+});
+
+// === Lighting ===
+scene.add(new THREE.AmbientLight(0x222326, 0.45));
+
+const keyLight = new THREE.SpotLight(0xfff0d8, 28, 18, Math.PI/5, 0.55, 1.6);
+keyLight.position.set(0, 9, 0);
+keyLight.target.position.set(0, 1.4, 0);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+keyLight.shadow.bias = -0.0005;
+scene.add(keyLight, keyLight.target);
+
+const fillLight = new THREE.DirectionalLight(0xff8c1a, 0.35);
+fillLight.position.set(-3, 1.5, -4);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0x4a5060, 0.4);
+rimLight.position.set(4, 2, 5);
+scene.add(rimLight);
+
+const innerLight = new THREE.PointLight(CONFIG.neonBase, 4, 5, 1.8);
+innerLight.position.set(0, CONFIG.glassY, 0);
+scene.add(innerLight);
+
+// === Polished concrete texture (procedural) ===
+function makeConcreteTexture(){
+  const size = 1024;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0d0d10';
+  ctx.fillRect(0, 0, size, size);
+  const img = ctx.getImageData(0, 0, size, size);
+  for (let i = 0; i < img.data.length; i += 4){
+    const n = (Math.random() - 0.5) * 32;
+    img.data[i]   = Math.max(0, Math.min(255, img.data[i]   + n));
+    img.data[i+1] = Math.max(0, Math.min(255, img.data[i+1] + n));
+    img.data[i+2] = Math.max(0, Math.min(255, img.data[i+2] + n));
+  }
+  ctx.putImageData(img, 0, 0);
+  // micro streaks
+  for (let i = 0; i < 100; i++){
+    ctx.strokeStyle = `rgba(255,255,255,${Math.random() * 0.04})`;
+    ctx.lineWidth = Math.random() * 1.5;
+    ctx.beginPath();
+    const x = Math.random() * size, y = Math.random() * size;
+    const a = Math.random() * Math.PI * 2;
+    const len = Math.random() * 300;
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+    ctx.stroke();
+  }
+  // darker patches
+  for (let i = 0; i < 50; i++){
+    const x = Math.random() * size, y = Math.random() * size;
+    const r = Math.random() * 100 + 50;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(0,0,0,0.18)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r*2, r*2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 3);
+  return tex;
+}
+
+// === Reflective floor ===
+const floorSize = 60;
+const floor = new Reflector(
+  new THREE.PlaneGeometry(floorSize, floorSize),
+  {
+    clipBias: 0.003,
+    textureWidth:  Math.min(1920, Math.floor(window.innerWidth  * Math.min(window.devicePixelRatio, 1.5))),
+    textureHeight: Math.min(1080, Math.floor(window.innerHeight * Math.min(window.devicePixelRatio, 1.5))),
+    color: 0x0a0a0c
+  }
+);
+floor.rotation.x = -Math.PI/2;
+scene.add(floor);
+
+// semi-transparent concrete layer on top of reflector
+const concreteTex = makeConcreteTexture();
+const overlay = new THREE.Mesh(
+  new THREE.PlaneGeometry(floorSize, floorSize),
+  new THREE.MeshStandardMaterial({
+    map: concreteTex,
+    roughnessMap: concreteTex,
+    roughness: 0.7,
+    metalness: 0.15,
+    transparent: true,
+    opacity: 0.5,
+    color: 0x141418
+  })
+);
+overlay.rotation.x = -Math.PI/2;
+overlay.position.y = 0.002;
+scene.add(overlay);
+
+// subtle radial grid (display area markings)
+const gridGroup = new THREE.Group();
+for (let r = 2.2; r <= 9; r += 1.7){
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(r - 0.005, r + 0.005, 80),
+    new THREE.MeshBasicMaterial({ color: 0x2a2a2e, side: THREE.DoubleSide, transparent: true, opacity: 0.18 })
+  );
+  ring.rotation.x = -Math.PI/2;
+  ring.position.y = 0.004;
+  gridGroup.add(ring);
+}
+for (let i = 0; i < 12; i++){
+  const a = (i / 12) * Math.PI * 2;
+  const pts = [
+    new THREE.Vector3(Math.cos(a) * 2,   0.004, Math.sin(a) * 2),
+    new THREE.Vector3(Math.cos(a) * 9,   0.004, Math.sin(a) * 9)
+  ];
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  gridGroup.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0x2a2a2e, transparent: true, opacity: 0.15 })));
+}
+scene.add(gridGroup);
+
+// === Matte black hex base ===
+const hexBase = new THREE.Mesh(
+  new THREE.CylinderGeometry(CONFIG.hexRadius * 0.92, CONFIG.hexRadius, 0.32, 6, 1),
+  new THREE.MeshStandardMaterial({ color: 0x050507, roughness: 0.65, metalness: 0.5 })
+);
+hexBase.position.y = 0.16;
+hexBase.castShadow = true;
+hexBase.receiveShadow = true;
+scene.add(hexBase);
+
+// polished top inset
+const topInset = new THREE.Mesh(
+  new THREE.CylinderGeometry(CONFIG.hexRadius * 0.72, CONFIG.hexRadius * 0.72, 0.025, 6),
+  new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.3, metalness: 0.85 })
+);
+topInset.position.y = 0.328;
+topInset.receiveShadow = true;
+scene.add(topInset);
+
+// accent rings on top of base
+const accentRing = new THREE.Mesh(
+  new THREE.RingGeometry(CONFIG.hexRadius * 0.78, CONFIG.hexRadius * 0.82, 6),
+  new THREE.MeshBasicMaterial({ color: CONFIG.neonBase, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+);
+accentRing.rotation.x = -Math.PI/2;
+accentRing.position.y = 0.342;
+scene.add(accentRing);
+
+const innerRing = new THREE.Mesh(
+  new THREE.RingGeometry(CONFIG.hexRadius * 0.4, CONFIG.hexRadius * 0.42, 6),
+  new THREE.MeshBasicMaterial({ color: CONFIG.neonBase, side: THREE.DoubleSide, transparent: true, opacity: 0.55 })
+);
+innerRing.rotation.x = -Math.PI/2;
+innerRing.position.y = 0.343;
+scene.add(innerRing);
+
+// perimeter glow strip on the side of hex base
+const baseGlow = new THREE.Mesh(
+  new THREE.CylinderGeometry(CONFIG.hexRadius * 1.005, CONFIG.hexRadius * 1.005, 0.04, 6, 1, true),
+  new THREE.MeshBasicMaterial({ color: CONFIG.neonBase, side: THREE.DoubleSide, transparent: true, opacity: 0.6 })
+);
+baseGlow.position.y = 0.16;
+scene.add(baseGlow);
+
+// === Levitating glass frame ===
+const glassGroup = new THREE.Group();
+glassGroup.position.y = CONFIG.glassY;
+scene.add(glassGroup);
+
+const glassGeo = new THREE.BoxGeometry(CONFIG.glassSize, CONFIG.glassSize, CONFIG.glassSize);
+const glassMat = new THREE.MeshPhysicalMaterial({
+  color: 0xc8d8e8,
+  metalness: 0,
+  roughness: 0.08,
+  transmission: 0.92,
+  thickness: 0.4,
+  ior: 1.45,
+  transparent: true,
+  opacity: 0.2,
+  side: THREE.FrontSide
+});
+const glassMesh = new THREE.Mesh(glassGeo, glassMat);
+glassGroup.add(glassMesh);
+
+// neon glowing edges
+const edgesGeo = new THREE.EdgesGeometry(glassGeo);
+const edgesMat = new THREE.LineBasicMaterial({ color: CONFIG.neonBase, transparent: true, opacity: 0.95 });
+const edges = new THREE.LineSegments(edgesGeo, edgesMat);
+glassGroup.add(edges);
+
+// outer halo edges (for bloom spread)
+const outerEdgesGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(CONFIG.glassSize * 1.012, CONFIG.glassSize * 1.012, CONFIG.glassSize * 1.012));
+const outerEdgesMat = new THREE.LineBasicMaterial({ color: CONFIG.neonBase, transparent: true, opacity: 0.3 });
+const outerEdges = new THREE.LineSegments(outerEdgesGeo, outerEdgesMat);
+glassGroup.add(outerEdges);
+
+// vertex nodes (small bright spheres at the 8 corners)
+const cornerGeo = new THREE.SphereGeometry(0.03, 12, 12);
+const cornerMat = new THREE.MeshBasicMaterial({ color: CONFIG.neonBase });
+const corners = [];
+const hh = CONFIG.glassSize / 2;
+for (const x of [-hh, hh]) for (const y of [-hh, hh]) for (const z of [-hh, hh]){
+  const c = new THREE.Mesh(cornerGeo, cornerMat);
+  c.position.set(x, y, z);
+  glassGroup.add(c);
+  corners.push(c);
+}
+
+// === Hologram placeholder (inside glass) ===
+const holoGroup = new THREE.Group();
+glassGroup.add(holoGroup);
+
+const modelDefs = [
+  { name: 'CUBE-α',   code: '#A001', factory: () => new THREE.BoxGeometry(0.7, 0.7, 0.7) },
+  { name: 'TORUS-β',  code: '#B014', factory: () => new THREE.TorusKnotGeometry(0.3, 0.1, 120, 18) },
+  { name: 'ICOSA-γ',  code: '#C027', factory: () => new THREE.IcosahedronGeometry(0.45, 0) },
+  { name: 'OCTA-δ',   code: '#D038', factory: () => new THREE.OctahedronGeometry(0.52, 0) },
+  { name: 'DODEC-ε',  code: '#E049', factory: () => new THREE.DodecahedronGeometry(0.42, 0) }
+];
+
+const holoUniforms = {
+  uTime:      { value: 0 },
+  uColor:     { value: new THREE.Color(CONFIG.neonBase) },
+  uIntensity: { value: 1.0 }
+};
+
+const holoMaterial = new THREE.ShaderMaterial({
+  uniforms: holoUniforms,
+  vertexShader: `
+    varying vec3 vNormal;
+    varying vec3 vViewPosition;
+    varying vec3 vWorldPos;
+    void main(){
+      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vWorldPos = wp.xyz;
+      vNormal = normalize(normalMatrix * normal);
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      vViewPosition = -mv.xyz;
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: `
+    uniform float uTime;
+    uniform vec3 uColor;
+    uniform float uIntensity;
+    varying vec3 vNormal;
+    varying vec3 vViewPosition;
+    varying vec3 vWorldPos;
+    void main(){
+      vec3 vd = normalize(vViewPosition);
+      float fres = pow(1.0 - abs(dot(vNormal, vd)), 1.8);
+      float scan = sin(vWorldPos.y * 55.0 - uTime * 3.0) * 0.5 + 0.5;
+      float bands = step(0.6, fract(vWorldPos.y * 7.0));
+      float flick = 0.92 + 0.08 * sin(uTime * 22.0) * sin(uTime * 5.7);
+      vec3 col = uColor * (fres * 1.5 + scan * 0.35 + 0.25 + bands * 0.1) * flick * uIntensity;
+      float a = (fres * 0.75 + scan * 0.25 + 0.22) * uIntensity;
+      gl_FragColor = vec4(col, a);
+    }
+  `,
+  transparent: true,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending
+});
+
+const wireMaterial = new THREE.MeshBasicMaterial({
+  color: CONFIG.neonBase,
+  wireframe: true,
+  transparent: true,
+  opacity: 0.45
+});
+
+let currentHoloMesh = null;
+let currentWireMesh = null;
+let currentModelIndex = -1;
+let swapTime = -10;
+
+function loadModel(index){
+  if (index === currentModelIndex) return;
+  if (currentHoloMesh){
+    holoGroup.remove(currentHoloMesh);
+    currentHoloMesh.geometry.dispose();
+  }
+  if (currentWireMesh){
+    holoGroup.remove(currentWireMesh);
+    currentWireMesh.geometry.dispose();
+  }
+  const def = modelDefs[index];
+  currentHoloMesh = new THREE.Mesh(def.factory(), holoMaterial);
+  holoGroup.add(currentHoloMesh);
+  currentWireMesh = new THREE.Mesh(def.factory(), wireMaterial);
+  currentWireMesh.scale.setScalar(1.015);
+  holoGroup.add(currentWireMesh);
+  currentModelIndex = index;
+  swapTime = currentTime;
+  document.querySelectorAll('.model-btn').forEach((btn, i) => btn.classList.toggle('active', i === index));
+  document.getElementById('spec-name').textContent = def.name;
+  document.getElementById('spec-code').textContent = def.code;
+}
+
+// === Atmospheric particles ===
+const particleCount = 320;
+const particleGeo = new THREE.BufferGeometry();
+const particlePos = new Float32Array(particleCount * 3);
+const particleVel = new Float32Array(particleCount);
+for (let i = 0; i < particleCount; i++){
+  const r = Math.random() * 12 + 1;
+  const a = Math.random() * Math.PI * 2;
+  particlePos[i*3]   = Math.cos(a) * r;
+  particlePos[i*3+1] = Math.random() * 9;
+  particlePos[i*3+2] = Math.sin(a) * r;
+  particleVel[i] = Math.random() * 0.5 + 0.15;
+}
+particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
+const particleMat = new THREE.PointsMaterial({
+  color: CONFIG.neonBase,
+  size: 0.038,
+  transparent: true,
+  opacity: 0.55,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const particles = new THREE.Points(particleGeo, particleMat);
+scene.add(particles);
+
+// === Volumetric light beam from above ===
+const beam = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.05, 1.8, 6.5, 32, 1, true),
+  new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(CONFIG.neonBase) } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      uniform float uTime; uniform vec3 uColor; varying vec2 vUv;
+      void main(){
+        float vert = smoothstep(0.0, 0.45, vUv.y) * (1.0 - smoothstep(0.5, 1.0, vUv.y));
+        float pulse = 0.7 + 0.3 * sin(uTime * 2.0 + vUv.y * 8.0);
+        float a = vert * pulse * 0.18;
+        gl_FragColor = vec4(uColor * 0.85, a);
+      }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  })
+);
+beam.position.set(0, 3.7, 0);
+scene.add(beam);
+
+// === Floor scan-ring pulse ===
+const scanRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.4, 0.45, 64),
+  new THREE.MeshBasicMaterial({
+    color: CONFIG.neonBase,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  })
+);
+scanRing.rotation.x = -Math.PI/2;
+scanRing.position.y = 0.006;
+scene.add(scanRing);
+
+// === Post-processing (bloom for the neon) ===
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.85, 0.35, 0.18
+);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
+
+// === Interaction (hover-brighten + click-to-swap) ===
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2(-2, -2);
+let hovered = false;
+const pedestalObjects = [glassMesh, hexBase];
+
+window.addEventListener('pointermove', (e) => {
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+});
+
+renderer.domElement.addEventListener('click', () => {
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(pedestalObjects, false);
+  if (hits.length > 0){
+    loadModel((currentModelIndex + 1) % modelDefs.length);
+  }
+});
+
+document.querySelectorAll('.model-btn').forEach((btn, i) => {
+  btn.addEventListener('click', () => loadModel(i));
+});
+
+window.addEventListener('keydown', (e) => {
+  const idx = parseInt(e.key) - 1;
+  if (idx >= 0 && idx < modelDefs.length) loadModel(idx);
+  if (e.key === ' '){
+    e.preventDefault();
+    controls.autoRotate = !controls.autoRotate;
+    document.getElementById('orbit-state').textContent = controls.autoRotate ? 'AUTO' : 'MANUAL';
+  }
+});
+
+// === Animation loop ===
+let currentTime = 0;
+let lastTime = performance.now() / 1000;
+
+const targetNeonColor = new THREE.Color(CONFIG.neonBase);
+const currentNeonColor = new THREE.Color(CONFIG.neonBase);
+const tmpScale = new THREE.Vector3();
+
+loadModel(0);
+
+function animate(){
+  requestAnimationFrame(animate);
+
+  const now = performance.now() / 1000;
+  const dt = Math.min(0.05, now - lastTime);
+  lastTime = now;
+  currentTime = now;
+  const t = currentTime;
+
+  // hover detection on pedestal area
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(pedestalObjects, false);
+  const nowHovered = hits.length > 0;
+  if (nowHovered !== hovered){
+    hovered = nowHovered;
+    document.body.classList.toggle('hovering', hovered);
+  }
+
+  // smooth neon color transition (base ↔ hover)
+  targetNeonColor.setHex(hovered ? CONFIG.neonHover : CONFIG.neonBase);
+  currentNeonColor.lerp(targetNeonColor, 0.07);
+
+  edgesMat.color.copy(currentNeonColor);
+  outerEdgesMat.color.copy(currentNeonColor);
+  cornerMat.color.copy(currentNeonColor);
+  accentRing.material.color.copy(currentNeonColor);
+  innerRing.material.color.copy(currentNeonColor);
+  baseGlow.material.color.copy(currentNeonColor);
+  holoUniforms.uColor.value.copy(currentNeonColor);
+  wireMaterial.color.copy(currentNeonColor);
+  particleMat.color.copy(currentNeonColor);
+  beam.material.uniforms.uColor.value.copy(currentNeonColor);
+  scanRing.material.color.copy(currentNeonColor);
+  innerLight.color.copy(currentNeonColor);
+
+  // hologram intensity responds to hover
+  const targetI = hovered ? 1.55 : 1.0;
+  holoUniforms.uIntensity.value += (targetI - holoUniforms.uIntensity.value) * 0.08;
+
+  // edge pulse
+  const pulse = 0.85 + Math.sin(t * 1.5) * 0.1;
+  edgesMat.opacity = hovered ? 1.0 : pulse;
+  outerEdgesMat.opacity = hovered ? 0.65 : 0.28;
+
+  // glass hover scale (subtle)
+  const ts = hovered ? 1.035 : 1.0;
+  tmpScale.setScalar(ts);
+  glassGroup.scale.lerp(tmpScale, 0.08);
+
+  // levitation bob + micro rotation
+  glassGroup.position.y = CONFIG.glassY + Math.sin(t * 0.7) * 0.06;
+  glassGroup.rotation.y = Math.sin(t * 0.35) * 0.025;
+  glassGroup.rotation.z = Math.sin(t * 0.45 + 1) * 0.015;
+
+  // hologram rotation (slow idle, faster on hover)
+  const rotSpeed = hovered ? 1.4 : 0.4;
+  holoGroup.rotation.y += dt * rotSpeed;
+  holoGroup.rotation.x += dt * rotSpeed * 0.3;
+
+  // swap-in scale animation
+  const sinceSwap = t - swapTime;
+  if (sinceSwap < 0.7){
+    const p = sinceSwap / 0.7;
+    const ease = 1 - Math.pow(1 - p, 4);
+    holoGroup.scale.setScalar(ease);
+  } else {
+    holoGroup.scale.setScalar(1.0);
+  }
+
+  holoUniforms.uTime.value = t;
+  beam.material.uniforms.uTime.value = t;
+
+  // drift particles upward
+  const positions = particleGeo.attributes.position.array;
+  for (let i = 0; i < particleCount; i++){
+    positions[i*3+1] += particleVel[i] * dt;
+    if (positions[i*3+1] > 9){
+      positions[i*3+1] = 0;
+      const r = Math.random() * 12 + 1;
+      const a = Math.random() * Math.PI * 2;
+      positions[i*3]   = Math.cos(a) * r;
+      positions[i*3+2] = Math.sin(a) * r;
+    }
+  }
+  particleGeo.attributes.position.needsUpdate = true;
+
+  // floor scan-ring expanding pulse
+  const scanT = (t % 3.5) / 3.5;
+  scanRing.scale.setScalar(0.4 + scanT * 8);
+  scanRing.material.opacity = (1 - scanT) * 0.45;
+
+  // inner light pulse
+  innerLight.intensity = hovered ? 6.5 : 3.8 + Math.sin(t * 2) * 0.5;
+
+  controls.update();
+  composer.render();
+}
+
+setTimeout(() => {
+  document.getElementById('loader').classList.add('hidden');
+  swapTime = currentTime; // trigger intro scale-in
+}, 1500);
+
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
